@@ -1,0 +1,6 @@
+add-key:
+  description: "Add a new key to taskd"
+del-key:
+  description: "Remove a key from taskd"
+list-keys:
+  description: "List keys allowed to access taskd"

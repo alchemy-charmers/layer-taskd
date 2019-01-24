@@ -1,0 +1,33 @@
+options:
+  tls_cn:
+    type: string
+    default: "taskd"
+    description: "The CN used for server certificate generation"
+  tls_org:
+    type: string
+    default: "Juju"
+    description: "The Organisation used for server certificate generation"
+  tls_country:
+    type: string
+    default: "UK"
+    description: "The two-letter country code for server certificate generation"
+  tls_state:
+    type: string
+    default: "London"
+    description: "The state to use for server certificate generation"
+  tls_locality:
+    type: string
+    default: "London"
+    description: "The locality to use for server certificate generation"
+  tls_expiry:
+    type: int
+    default: 365
+    description: "The number of days before the generated TLS certificates will be valid for. Once expired, the will need to be regenerated"
+  port:
+    type: int
+    default: 53589
+    description: "The port which taskd will listen for connection on. This will also be passed via the reverseproxy relation and determine the external TCP port that will be used if related to a load balancer."
+  listen:
+    type: string
+    default: "0.0.0.0"
+    description: "The local IP address taskd will listen on"

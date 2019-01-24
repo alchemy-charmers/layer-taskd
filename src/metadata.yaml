@@ -1,0 +1,15 @@
+name: taskd
+summary: Synchronisation server for taskwarrior
+maintainer: James Hebden <james@hebden.net.au>
+description: |
+  This is the server for the taskwarrior synchronisation function (task
+  sync). Multiple users and multiple clients per user are supported.
+  Connections are secured with TLS using user-generated certificates.
+tags:
+  - misc
+subordinate: false
+series:
+  - bionic
+requires:
+  reverseproxy:
+    interface: reverseproxy

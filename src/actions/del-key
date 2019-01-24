@@ -1,0 +1,6 @@
+#!/usr/local/sbin/charm-env python3
+
+from lib_taskd import TaskdHelper
+
+helper = TaskdHelper()
+helper.del_key()
