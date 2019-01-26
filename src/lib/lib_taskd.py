@@ -8,6 +8,9 @@ from charms.reactive.helpers import any_file_changed
 from charmhelpers import fetch
 import subprocess
 import socket
+import grp
+import pwd
+import os
 
 
 class TaskdHelper():
@@ -27,6 +30,30 @@ class TaskdHelper():
         ''' List all keys created for users as an action '''
         return
 
+    def fix_permissions(self):
+        ''' Fix permissions '''
+        ''' Taskd doesn't run as root '''
+        for path in [
+                '/var/lib/taskd',
+                '/usr/share/taskd']:
+            uid = pwd.getpwnam('Debian-taskd').pw_uid
+            gid = grp.getgrnam('Debian-taskd').gr_gid
+            for root, dirnames, filenames in os.walk(path):
+                os.chown(root, uid, gid)
+                hookenv.log("Fixing data dir permissions: {}".format(
+                    root), 'DEBUG')
+                for dirname in dirnames:
+                    os.chown(os.path.join(root, dirname), uid, gid)
+                    hookenv.log("Fixing dir permissions: {}".format(
+                        dirname), 'DEBUG')
+                for filename in filenames:
+                    os.chown(os.path.join(root, filename), uid, gid)
+                    hookenv.log("Fixing file permissions: {}".format(
+                        filename), 'DEBUG')
+
+    def restart(self):
+        host.service('restart', 'taskd')
+
     def start_enable(self):
         host.service('enable', 'taskd')
         host.service('start', 'taskd')
@@ -43,9 +70,15 @@ class TaskdHelper():
         proxy.configure(proxy_config)
 
     def configure(self):
+        restart = False
+
         server = "{}:{}".format(
             self.charm_config['listen'],
             self.charm_config['port'])
+
+        hookenv.log("Configuring taskd server {}".format(
+                    server), 'DEBUG')
+
         templating.render('config.j2',
                           '/var/lib/taskd/config',
                           {
@@ -58,7 +91,7 @@ class TaskdHelper():
                                   '--data',
                                   '/var/lib/taskd'])
             p.wait()
-            host.service('restart', 'taskd')
+            restart = True
 
         if self.charm_config['tls_cn']:
             cn = self.charm_config['tls_cn']
@@ -85,7 +118,7 @@ class TaskdHelper():
             p = subprocess.Popen(['/usr/share/taskd/pki/generate'],
                                  cwd='/usr/share/taskd/pki')
             p.wait()
-            host.service('restart', 'taskd')
+            restart = True
 
         fullport = "{}/tcp".format(
             self.charm_config['port'])
@@ -100,6 +133,13 @@ class TaskdHelper():
                 self.charm_config['port'],
                 'tcp')
 
+        self.fix_permissions()
+        self.start_enable()
+
+        if restart:
+            self.restart()
+
     def install(self):
         fetch.apt_install('taskd', fatal=True)
+        self.configure()
         return True
