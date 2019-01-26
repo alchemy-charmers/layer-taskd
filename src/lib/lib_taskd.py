@@ -1,4 +1,9 @@
-from charmhelpers.core import hookenv, host, templating, unitdata
+from charmhelpers.core import (
+    hookenv,
+    host,
+    templating,
+    unitdata
+)
 from charms.reactive.helpers import any_file_changed
 from charmhelpers import fetch
 import subprocess
@@ -81,6 +86,19 @@ class TaskdHelper():
                                  cwd='/usr/share/taskd/pki')
             p.wait()
             host.service('restart', 'taskd')
+
+        fullport = "{}/tcp".format(
+            self.charm_config['port'])
+
+        for port in hookenv.opened_ports():
+            if not fullport == port:
+                cport, cproto = port.split('/')
+                hookenv.close_port(cport, cproto)
+
+        if fullport not in hookenv.opened_ports():
+            hookenv.open_port(
+                self.charm_config['port'],
+                'tcp')
 
     def install(self):
         fetch.apt_install('taskd', fatal=True)
