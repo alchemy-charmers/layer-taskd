@@ -1,0 +1,12 @@
+#!/usr/local/sbin/charm-env python3
+
+from lib_taskd import TaskdHelper
+from charmhelpers.core import hookenv
+
+helper = TaskdHelper()
+err = helper.remove_user(hookenv.action_get('org'),
+		         hookenv.action_get('user'))
+if err:
+    hookenv.action_fail(err)
+else:
+    hookenv.action_set({'outcome': 'success'})

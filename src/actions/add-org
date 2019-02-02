@@ -1,0 +1,11 @@
+#!/usr/local/sbin/charm-env python3
+
+from lib_taskd import TaskdHelper
+from charmhelpers.core import hookenv
+
+helper = TaskdHelper()
+err = helper.add_org(hookenv.action_get('org'))
+if err:
+    hookenv.action_fail(err)
+else:
+    hookenv.action_set({'outcome': 'success'})

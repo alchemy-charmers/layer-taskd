@@ -6,6 +6,7 @@ from charmhelpers.core import (
 )
 from charms.reactive.helpers import any_file_changed
 from charmhelpers import fetch
+from pathlib import Path
 import subprocess
 import socket
 import grp
@@ -17,6 +18,8 @@ class TaskdHelper():
     def __init__(self):
         self.charm_config = hookenv.config()
         self.kv = unitdata.kv()
+        self.pki_folder = "/usr/share/taskd/pki"
+        self.data_folder = "/var/lib/taskd"
 
     def add_key(self):
         ''' An action to allow adding of users / keys'''
@@ -29,6 +32,130 @@ class TaskdHelper():
     def list_keys(self):
         ''' List all keys created for users as an action '''
         return
+
+    @property
+    def orgs(self):
+        ''' Persistant dictionary of all orgs and user data '''
+        orgs = self.kv.get('orgs')
+        if orgs is None:
+            orgs = {}
+            self.kv.set('orgs', orgs)
+            self.kv.flush()
+        return orgs
+
+    @orgs.setter
+    def orgs(self, orgs):
+        self.kv.set('orgs', orgs)
+        self.kv.flush()
+
+    def add_org(self, org_name):
+        ''' Add an organization '''
+        orgs = self.orgs
+        cmd = ['taskd',
+               'add',
+               'org',
+               org_name,
+               '--data',
+               self.data_folder,
+               ]
+        try:
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to create org: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
+        orgs[org_name] = {}
+        self.orgs = orgs
+        hookenv.log("Create org: {}".format(org_name), 'INFO')
+
+    def add_user(self, org_name, user_name):
+        ''' Add a user to an organization '''
+        orgs = self.orgs
+        if orgs.get(org_name) is None:
+            return "Org does not exist, create it first"
+        if orgs.get(org_name).get(user_name):
+            return "User already exists"
+        cmd = ['taskd',
+               'add',
+               'user',
+               org_name,
+               user_name,
+               '--data',
+               self.data_folder,
+               ]
+        try:
+            result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to create user: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
+        key = result.decode().split('\n')[0].split(':')[1].strip()
+        orgs[org_name][user_name] = {}
+        orgs[org_name][user_name]['key'] = key
+        cert_name = '{}_{}'.format(org_name,
+                                   user_name.replace(' ', '_')
+                                   )
+        err = self.create_cert(cert_name)
+        if err:
+            return err
+        orgs[org_name][user_name]['cert_name'] = cert_name
+        self.orgs = orgs
+
+    def remove_user(self, org_name, user_name):
+        ''' Remove a user '''
+        orgs = self.orgs
+        if not orgs.get(org_name).get(user_name):
+            return "User does not exists"
+        key = orgs[org_name][user_name]['key']
+        cmd = ['taskd',
+               'remove',
+               'user',
+               org_name,
+               key,
+               '--data',
+               self.data_folder,
+               ]
+        try:
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to remove user: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
+        cert_name = orgs[org_name][user_name]['cert_name']
+        for path in Path(self.pki_folder).glob("{}.*".format(cert_name)):
+            path.unlink()
+        del orgs[org_name][user_name]
+        self.orgs = orgs
+
+    def remove_org(self, org_name):
+        ''' Remove an org and all users in it '''
+        orgs = self.orgs
+        if not orgs.get(org_name):
+            return "Org does not exists"
+        for user in orgs[org_name]:
+            self.remove_user(org_name, user)
+        cmd = ['taskd',
+               'remove',
+               'org',
+               org_name,
+               '--data',
+               self.data_folder,
+               ]
+        try:
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to remove org: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
+        del orgs[org_name]
+        self.orgs = orgs
+
+    def create_cert(self, user_name):
+        ''' Generate a cert with the given user name '''
+        os.chdir(self.pki_folder)
+        cmd = ['./generate.client',
+               user_name]
+        try:
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to generate cert: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
 
     def fix_permissions(self):
         ''' Fix permissions '''
