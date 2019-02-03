@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 from lib_taskd import TaskdHelper
 from charmhelpers.core import hookenv
 from charms.reactive import (

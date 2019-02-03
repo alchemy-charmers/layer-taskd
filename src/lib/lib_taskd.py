@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 from charmhelpers.core import (
     hookenv,
     host,
@@ -15,6 +16,7 @@ import grp
 import pwd
 import os
 import io
+import sys
 
 
 class TaskdHelper():
@@ -56,6 +58,7 @@ class TaskdHelper():
             return e.output.decode()
         orgs[org_name] = {}
         self.orgs = orgs
+        self.fix_permissions()
         hookenv.log("Create org: {}".format(org_name), 'INFO')
 
     def add_user(self, org_name, user_name):
@@ -119,7 +122,7 @@ class TaskdHelper():
     def remove_org(self, org_name):
         ''' Remove an org and all users in it '''
         orgs = self.orgs
-        if not orgs.get(org_name):
+        if orgs.get(org_name) is None:
             return "Org does not exists"
         for user in orgs[org_name]:
             self.remove_user(org_name, user)
@@ -152,6 +155,7 @@ class TaskdHelper():
 
     def get_user_config(self, org_name, user_name):
         ''' retreive the congiruation for a user '''
+        print(sys.version_info)
         orgs = self.orgs
         if not orgs.get(org_name):
             return 'Org does not exist'
@@ -162,20 +166,22 @@ class TaskdHelper():
         tar_file = tarfile.open(tar_name,
                                 mode='w:gz',
                                 )
-        pki = Path(self.pki_folder)
-        ca_path = pki / Path('ca.cert.pem')
+        # pki = Path(self.pki_folder)
+        ca_path = os.path.join(self.pki_folder, 'ca.cert.pem')
         tar_file.addfile(tar_file.gettarinfo(name=ca_path,
                                              arcname="ca.cert.pem"),
                          open(ca_path, 'rb')
                          )
         cert_file = orgs[org_name][user_name]['cert_name'] + ".cert.pem"
-        cert_path = pki / Path(cert_file)
+        # cert_path = pki / Path(cert_file)
+        cert_path = os.path.join(self.pki_folder, cert_file)
         tar_file.addfile(tar_file.gettarinfo(name=cert_path,
                                              arcname=cert_file),
                          open(cert_path, 'rb')
                          )
         key_file = orgs[org_name][user_name]['cert_name'] + ".key.pem"
-        key_path = pki / Path(key_file)
+        # key_path = pki / Path(key_file)
+        key_path = os.path.join(self.pki_folder, key_file)
         tar_file.addfile(tar_file.gettarinfo(name=key_path,
                                              arcname=key_file),
                          open(key_path, 'rb')
