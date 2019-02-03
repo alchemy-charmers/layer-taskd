@@ -227,8 +227,8 @@ class TaskdHelper():
                         dirname), 'DEBUG')
                 for filename in filenames:
                     os.chown(os.path.join(root, filename), uid, gid)
-                    hookenv.log("Fixing file permissions: {}".format(
-                        filename), 'DEBUG')
+                    # hookenv.log("Fixing file permissions: {}".format(
+                    #     filename), 'DEBUG')
 
     def restart(self):
         host.service('restart', 'taskd')
