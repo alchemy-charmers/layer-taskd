@@ -24,18 +24,6 @@ class TaskdHelper():
         self.pki_folder = "/usr/share/taskd/pki"
         self.data_folder = "/var/lib/taskd"
 
-    def add_key(self):
-        ''' An action to allow adding of users / keys'''
-        return
-
-    def del_key(self):
-        ''' An action to allow removal of users / keys'''
-        return
-
-    def list_keys(self):
-        ''' List all keys created for users as an action '''
-        return
-
     @property
     def orgs(self):
         ''' Persistant dictionary of all orgs and user data '''

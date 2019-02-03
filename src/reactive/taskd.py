@@ -25,6 +25,7 @@ def install_taskd():
 def configure_taskd():
     hookenv.status_set('maintenance', 'Configuring taskd')
     taskd.configure()
+    taskd.add_org('default')
     hookenv.status_set('active', HEALTHY)
     set_flag('taskd.configured')
 

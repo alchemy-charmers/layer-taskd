@@ -8,7 +8,6 @@ add-user:
       description: "Name of the user to add"
       type: string
   required:
-    - org
     - user
 add-org:
   description: "Add an org"
@@ -28,7 +27,6 @@ remove-user:
       description: "Name of the user to remove"
       type: string
   required:
-    - org
     - user
 remove-org:
   description: "Remove an org"
@@ -39,13 +37,12 @@ remove-org:
   required:
     - org
 get-config:
-  description: "Prepaire a .tgz with client config for a user"
+  description: "Prepare a .tgz with client config for a user"
   properties:
     org:
       description: "The org the user is in"
       type: string
     user:
-      description: "The user name to prepaire"
+      description: "The user name to prepare"
   required:
-    - org
     - user
