@@ -1,0 +1,16 @@
+#!/usr/local/sbin/charm-env python3
+
+from lib_taskd import TaskdHelper
+from charmhelpers.core import hookenv
+
+helper = TaskdHelper()
+cfg_file = helper.get_user_config(hookenv.action_get('org'),
+		      	     	  hookenv.action_get('user'))
+if not cfg_file.startswith('/tmp'):
+    hookenv.action_fail(cfg_file)
+else:
+    msg = "juju scp {}:{} .".format(hookenv.local_unit(), cfg_file)
+    hookenv.action_set({'outcome': 'success',
+                        'file-name': cfg_file,
+			'retreive-cmd': msg,
+			})

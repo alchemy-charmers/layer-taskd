@@ -1,8 +1,8 @@
 options:
   tls_cn:
     type: string
-    default: "taskd"
-    description: "The CN used for server certificate generation"
+    default: ""
+    description: "The CN used for server certificate generation, set to empty for fqdn"
   tls_org:
     type: string
     default: "Juju"

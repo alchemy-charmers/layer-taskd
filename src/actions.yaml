@@ -38,3 +38,14 @@ remove-org:
       type: string
   required:
     - org
+get-config:
+  description: "Prepaire a .tgz with client config for a user"
+  properties:
+    org:
+      description: "The org the user is in"
+      type: string
+    user:
+      description: "The user name to prepaire"
+  required:
+    - org
+    - user

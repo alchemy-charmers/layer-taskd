@@ -9,9 +9,12 @@ from charmhelpers import fetch
 from pathlib import Path
 import subprocess
 import socket
+import tempfile
+import tarfile
 import grp
 import pwd
 import os
+import io
 
 
 class TaskdHelper():
@@ -98,6 +101,7 @@ class TaskdHelper():
             return err
         orgs[org_name][user_name]['cert_name'] = cert_name
         self.orgs = orgs
+        self.fix_permissions()
 
     def remove_user(self, org_name, user_name):
         ''' Remove a user '''
@@ -156,6 +160,60 @@ class TaskdHelper():
         except subprocess.CalledProcessError as e:
             hookenv.log("Failed to generate cert: {}".format(e.output.decode()), 'ERROR')
             return e.output.decode()
+        self.fix_permissions()
+
+    def get_user_config(self, org_name, user_name):
+        ''' retreive the congiruation for a user '''
+        orgs = self.orgs
+        if not orgs.get(org_name):
+            return 'Org does not exist'
+        if not orgs.get(org_name).get(user_name):
+            return "User does not exists"
+        tmp_file = tempfile.NamedTemporaryFile(delete=False)
+        tar_name = tmp_file.name + '.tgz'
+        tar_file = tarfile.open(tar_name,
+                                mode='w:gz',
+                                )
+        pki = Path(self.pki_folder)
+        ca_path = pki / Path('ca.cert.pem')
+        tar_file.addfile(tar_file.gettarinfo(name=ca_path,
+                                             arcname="ca.cert.pem"),
+                         open(ca_path, 'rb')
+                         )
+        cert_file = orgs[org_name][user_name]['cert_name'] + ".cert.pem"
+        cert_path = pki / Path(cert_file)
+        tar_file.addfile(tar_file.gettarinfo(name=cert_path,
+                                             arcname=cert_file),
+                         open(cert_path, 'rb')
+                         )
+        key_file = orgs[org_name][user_name]['cert_name'] + ".key.pem"
+        key_path = pki / Path(key_file)
+        tar_file.addfile(tar_file.gettarinfo(name=key_path,
+                                             arcname=key_file),
+                         open(key_path, 'rb')
+                         )
+
+        context = {'org_name': org_name,
+                   'user_name': user_name,
+                   'user_key': orgs[org_name][user_name]['key'],
+                   'cert_name': cert_file,
+                   'key_name': key_file,
+                   'task_port': self.charm_config['port'],
+                   'task_server': socket.getfqdn(),
+                   }
+
+        config_script = templating.render('task.rc.j2',
+                                          None,
+                                          context,
+                                          )
+        config_info = tarfile.TarInfo(name='setup.sh')
+        config_info.size = len(config_script)
+        config_info.mode = 0o0755
+        tar_file.addfile(config_info,
+                         io.BytesIO(config_script.encode('utf8')),
+                         )
+        tar_file.close()
+        return tar_name
 
     def fix_permissions(self):
         ''' Fix permissions '''

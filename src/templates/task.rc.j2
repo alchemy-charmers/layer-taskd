@@ -1,0 +1,8 @@
+# Taskd config
+cp *.pem ~/.task
+task config taskd.certificate -- ~/.task/{{cert_name}}
+task config taskd.key -- ~/.task/{{key_name}}
+task config taskd.ca -- ~/.task/ca.cert.pem
+task config taskd.server -- {{task_server}}:{{task_port}}
+task config taskd.credentials -- {{org_name}}/{{user_name}}/{{user_key}}
+# task config taskd.trust=ignore hostname
