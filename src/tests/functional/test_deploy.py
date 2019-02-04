@@ -145,7 +145,7 @@ async def test_add_relation(model, apps):
     await model.block_until(lambda: haproxy.status == 'active')
     port = 53589
     for app in apps:
-        await app.set_config({'port': port})
+        await app.set_config({'port': str(port)})
         port += 1
         await app.add_relation('reverseproxy', 'haproxy:reverseproxy')
         await model.block_until(lambda: haproxy.status == 'maintenance')

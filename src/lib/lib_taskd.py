@@ -166,21 +166,18 @@ class TaskdHelper():
         tar_file = tarfile.open(tar_name,
                                 mode='w:gz',
                                 )
-        # pki = Path(self.pki_folder)
         ca_path = os.path.join(self.pki_folder, 'ca.cert.pem')
         tar_file.addfile(tar_file.gettarinfo(name=ca_path,
                                              arcname="ca.cert.pem"),
                          open(ca_path, 'rb')
                          )
         cert_file = orgs[org_name][user_name]['cert_name'] + ".cert.pem"
-        # cert_path = pki / Path(cert_file)
         cert_path = os.path.join(self.pki_folder, cert_file)
         tar_file.addfile(tar_file.gettarinfo(name=cert_path,
                                              arcname=cert_file),
                          open(cert_path, 'rb')
                          )
         key_file = orgs[org_name][user_name]['cert_name'] + ".key.pem"
-        # key_path = pki / Path(key_file)
         key_path = os.path.join(self.pki_folder, key_file)
         tar_file.addfile(tar_file.gettarinfo(name=key_path,
                                              arcname=key_file),
@@ -193,7 +190,7 @@ class TaskdHelper():
                    'cert_name': cert_file,
                    'key_name': key_file,
                    'task_port': self.charm_config['port'],
-                   'task_server': socket.getfqdn(),
+                   'task_server': self.charm_config['tls_cn'] or socket.getfqdn(),
                    }
 
         config_script = templating.render('task.rc.j2',
@@ -223,8 +220,8 @@ class TaskdHelper():
                     root), 'DEBUG')
                 for dirname in dirnames:
                     os.chown(os.path.join(root, dirname), uid, gid)
-                    hookenv.log("Fixing dir permissions: {}".format(
-                        dirname), 'DEBUG')
+                    # hookenv.log("Fixing dir permissions: {}".format(
+                    #     dirname), 'DEBUG')
                 for filename in filenames:
                     os.chown(os.path.join(root, filename), uid, gid)
                     # hookenv.log("Fixing file permissions: {}".format(
@@ -248,6 +245,13 @@ class TaskdHelper():
         ]
         proxy.configure(proxy_config)
 
+    def init(self):
+        p = subprocess.Popen(['/usr/bin/taskd',
+                              'init',
+                              '--data',
+                              '/var/lib/taskd'])
+        p.wait()
+
     def configure(self):
         restart = False
 
@@ -265,11 +269,6 @@ class TaskdHelper():
                           })
 
         if any_file_changed(['/var/lib/taskd/config']):
-            p = subprocess.Popen(['/usr/bin/taskd',
-                                  'init',
-                                  '--data',
-                                  '/var/lib/taskd'])
-            p.wait()
             restart = True
 
         if self.charm_config['tls_cn']:
