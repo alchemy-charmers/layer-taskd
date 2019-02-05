@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 from charmhelpers.core import (
     hookenv,
     host,
@@ -6,29 +7,204 @@ from charmhelpers.core import (
 )
 from charms.reactive.helpers import any_file_changed
 from charmhelpers import fetch
+from pathlib import Path
 import subprocess
 import socket
+import tempfile
+import tarfile
 import grp
 import pwd
 import os
+import io
+import sys
 
 
 class TaskdHelper():
     def __init__(self):
         self.charm_config = hookenv.config()
         self.kv = unitdata.kv()
+        self.pki_folder = "/usr/share/taskd/pki"
+        self.data_folder = "/var/lib/taskd"
 
-    def add_key(self):
-        ''' An action to allow adding of users / keys'''
-        return
+    @property
+    def orgs(self):
+        ''' Persistant dictionary of all orgs and user data '''
+        orgs = self.kv.get('orgs')
+        if orgs is None:
+            orgs = {}
+            self.kv.set('orgs', orgs)
+            self.kv.flush()
+        return orgs
 
-    def del_key(self):
-        ''' An action to allow removal of users / keys'''
-        return
+    @orgs.setter
+    def orgs(self, orgs):
+        self.kv.set('orgs', orgs)
+        self.kv.flush()
 
-    def list_keys(self):
-        ''' List all keys created for users as an action '''
-        return
+    def add_org(self, org_name):
+        ''' Add an organization '''
+        orgs = self.orgs
+        cmd = ['taskd',
+               'add',
+               'org',
+               org_name,
+               '--data',
+               self.data_folder,
+               ]
+        try:
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to create org: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
+        orgs[org_name] = {}
+        self.orgs = orgs
+        self.fix_permissions()
+        hookenv.log("Create org: {}".format(org_name), 'INFO')
+
+    def add_user(self, org_name, user_name):
+        ''' Add a user to an organization '''
+        orgs = self.orgs
+        if orgs.get(org_name) is None:
+            return "Org does not exist, create it first"
+        if orgs.get(org_name).get(user_name):
+            return "User already exists"
+        cmd = ['taskd',
+               'add',
+               'user',
+               org_name,
+               user_name,
+               '--data',
+               self.data_folder,
+               ]
+        try:
+            result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to create user: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
+        key = result.decode().split('\n')[0].split(':')[1].strip()
+        orgs[org_name][user_name] = {}
+        orgs[org_name][user_name]['key'] = key
+        cert_name = '{}_{}'.format(org_name,
+                                   user_name.replace(' ', '_')
+                                   )
+        err = self.create_cert(cert_name)
+        if err:
+            return err
+        orgs[org_name][user_name]['cert_name'] = cert_name
+        self.orgs = orgs
+        self.fix_permissions()
+
+    def remove_user(self, org_name, user_name):
+        ''' Remove a user '''
+        orgs = self.orgs
+        if not orgs.get(org_name).get(user_name):
+            return "User does not exists"
+        key = orgs[org_name][user_name]['key']
+        cmd = ['taskd',
+               'remove',
+               'user',
+               org_name,
+               key,
+               '--data',
+               self.data_folder,
+               ]
+        try:
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to remove user: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
+        cert_name = orgs[org_name][user_name]['cert_name']
+        for path in Path(self.pki_folder).glob("{}.*".format(cert_name)):
+            path.unlink()
+        del orgs[org_name][user_name]
+        self.orgs = orgs
+
+    def remove_org(self, org_name):
+        ''' Remove an org and all users in it '''
+        orgs = self.orgs
+        if orgs.get(org_name) is None:
+            return "Org does not exists"
+        for user in orgs[org_name]:
+            self.remove_user(org_name, user)
+        cmd = ['taskd',
+               'remove',
+               'org',
+               org_name,
+               '--data',
+               self.data_folder,
+               ]
+        try:
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to remove org: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
+        del orgs[org_name]
+        self.orgs = orgs
+
+    def create_cert(self, user_name):
+        ''' Generate a cert with the given user name '''
+        os.chdir(self.pki_folder)
+        cmd = ['./generate.client',
+               user_name]
+        try:
+            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            hookenv.log("Failed to generate cert: {}".format(e.output.decode()), 'ERROR')
+            return e.output.decode()
+        self.fix_permissions()
+
+    def get_user_config(self, org_name, user_name):
+        ''' retreive the congiruation for a user '''
+        print(sys.version_info)
+        orgs = self.orgs
+        if not orgs.get(org_name):
+            return 'Org does not exist'
+        if not orgs.get(org_name).get(user_name):
+            return "User does not exists"
+        tmp_file = tempfile.NamedTemporaryFile(delete=False)
+        tar_name = tmp_file.name + '.tgz'
+        tar_file = tarfile.open(tar_name,
+                                mode='w:gz',
+                                )
+        ca_path = os.path.join(self.pki_folder, 'ca.cert.pem')
+        tar_file.addfile(tar_file.gettarinfo(name=ca_path,
+                                             arcname="ca.cert.pem"),
+                         open(ca_path, 'rb')
+                         )
+        cert_file = orgs[org_name][user_name]['cert_name'] + ".cert.pem"
+        cert_path = os.path.join(self.pki_folder, cert_file)
+        tar_file.addfile(tar_file.gettarinfo(name=cert_path,
+                                             arcname=cert_file),
+                         open(cert_path, 'rb')
+                         )
+        key_file = orgs[org_name][user_name]['cert_name'] + ".key.pem"
+        key_path = os.path.join(self.pki_folder, key_file)
+        tar_file.addfile(tar_file.gettarinfo(name=key_path,
+                                             arcname=key_file),
+                         open(key_path, 'rb')
+                         )
+
+        context = {'org_name': org_name,
+                   'user_name': user_name,
+                   'user_key': orgs[org_name][user_name]['key'],
+                   'cert_name': cert_file,
+                   'key_name': key_file,
+                   'task_port': self.charm_config['port'],
+                   'task_server': self.charm_config['tls_cn'] or socket.getfqdn(),
+                   }
+
+        config_script = templating.render('task.rc.j2',
+                                          None,
+                                          context,
+                                          )
+        config_info = tarfile.TarInfo(name='setup.sh')
+        config_info.size = len(config_script)
+        config_info.mode = 0o0755
+        tar_file.addfile(config_info,
+                         io.BytesIO(config_script.encode('utf8')),
+                         )
+        tar_file.close()
+        return tar_name
 
     def fix_permissions(self):
         ''' Fix permissions '''
@@ -44,12 +220,12 @@ class TaskdHelper():
                     root), 'DEBUG')
                 for dirname in dirnames:
                     os.chown(os.path.join(root, dirname), uid, gid)
-                    hookenv.log("Fixing dir permissions: {}".format(
-                        dirname), 'DEBUG')
+                    # hookenv.log("Fixing dir permissions: {}".format(
+                    #     dirname), 'DEBUG')
                 for filename in filenames:
                     os.chown(os.path.join(root, filename), uid, gid)
-                    hookenv.log("Fixing file permissions: {}".format(
-                        filename), 'DEBUG')
+                    # hookenv.log("Fixing file permissions: {}".format(
+                    #     filename), 'DEBUG')
 
     def restart(self):
         host.service('restart', 'taskd')
@@ -69,6 +245,13 @@ class TaskdHelper():
         ]
         proxy.configure(proxy_config)
 
+    def init(self):
+        p = subprocess.Popen(['/usr/bin/taskd',
+                              'init',
+                              '--data',
+                              '/var/lib/taskd'])
+        p.wait()
+
     def configure(self):
         restart = False
 
@@ -86,11 +269,6 @@ class TaskdHelper():
                           })
 
         if any_file_changed(['/var/lib/taskd/config']):
-            p = subprocess.Popen(['/usr/bin/taskd',
-                                  'init',
-                                  '--data',
-                                  '/var/lib/taskd'])
-            p.wait()
             restart = True
 
         if self.charm_config['tls_cn']:

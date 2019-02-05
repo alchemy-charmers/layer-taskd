@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 from lib_taskd import TaskdHelper
 from charmhelpers.core import hookenv
 from charms.reactive import (
@@ -17,6 +18,9 @@ HEALTHY = 'taskd installed and configured'
 def install_taskd():
     hookenv.status_set('maintenance', 'Installing taskd')
     taskd.install()
+    taskd.init()
+    taskd.configure()
+    taskd.add_org('default')
     hookenv.status_set('active', 'taskd installed')
     set_flag('taskd.installed')
 

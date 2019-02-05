@@ -1,6 +1,48 @@
-add-key:
-  description: "Add a new key to taskd"
-del-key:
-  description: "Remove a key from taskd"
-list-keys:
-  description: "List keys allowed to access taskd"
+add-user:
+  description: "Add a user to an org"
+  params:
+    org:
+      description: "Name of the org to add the user to"
+      type: string
+    user:
+      description: "Name of the user to add"
+      type: string
+  required:
+    - user
+add-org:
+  description: "Add an org"
+  properties:
+    org:
+      description: "Name of the org to add"
+      type: string
+  required:
+    - org
+remove-user:
+  description: "Remove a user"
+  params:
+    org:
+      description: "Name of the org to remove the user from"
+      type: string
+    user:
+      description: "Name of the user to remove"
+      type: string
+  required:
+    - user
+remove-org:
+  description: "Remove an org"
+  properties:
+    org:
+      description: "Name of the org to remove"
+      type: string
+  required:
+    - org
+get-config:
+  description: "Prepare a .tgz with client config for a user"
+  properties:
+    org:
+      description: "The org the user is in"
+      type: string
+    user:
+      description: "The user name to prepare"
+  required:
+    - user
